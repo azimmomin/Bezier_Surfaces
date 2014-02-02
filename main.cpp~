@@ -1,0 +1,336 @@
+// CS184 AS3
+#include <vector>
+#include <iostream>
+#include <fstream>
+#include <cmath>
+#include <string>
+#include <cstdlib>
+#include <sstream>
+#include <vector>
+#include "point.h"
+#include "patch.h"
+#include "normal.h"
+#include "tessellate.h"
+#include <cfloat>
+#include <cstring>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/time.h>
+#endif
+
+
+#ifdef OSX
+#include <GLUT/glut.h>
+#include <OpenGL/glu.h>
+#else
+#include <GL/glut.h>
+#include <GL/glu.h>
+#endif
+
+#include <time.h>
+#include <math.h>
+
+#ifdef _WIN32
+static DWORD lastTime;
+#else
+static struct timeval lastTime;
+#endif
+
+#define PI 3.14159265
+
+using namespace std;
+
+//****************************************************
+// Some Classes
+//****************************************************
+class Viewport {
+  public:
+    int w, h; // width and height
+};
+
+
+//****************************************************
+// Global Variables
+//****************************************************
+Viewport viewport;
+string filename;
+int selected = -1;
+float fovy = 45.0f;
+float maxX, maxY, minX, minY, maxZ, minZ;
+bool adaptive = false;
+bool wireframe = false;
+bool smooth = false;
+bool hidden = false;
+bool flat = true;
+Renderer *renderer;
+GLfloat ambientColor[]  = {0.2f, 0.2f, 0.2f, 1.0f};
+GLfloat lightColor0[] = {0.5f, 0.5f, 0.5f, 1.0f};
+GLfloat lightPos0[] = {4.0f, 0.0f, 8.0f, 1.0f};
+GLfloat lightColor1[] = {0.5f, 0.2f, 0.2f, 1.0f};
+GLfloat lightPos1[] = {-1.0f, 0.5f, 0.5f, 0.0f};
+//****************************************************
+// reshape viewport if the window is resized
+//****************************************************
+void myReshape(int w, int h) {
+  viewport.w = w;
+  viewport.h = h;
+
+  glViewport(0,0,viewport.w,viewport.h);// sets the rectangle that will be the window
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();                // loading the identity matrix for the screen
+
+  //----------- setting the projection -------------------------
+  // glOrtho sets left, right, bottom, top, zNear, zFar of the chord system
+
+
+  //glOrtho(-1, 1 + (w-400)/200.0 , -1 -(h-400)/200.0, 1, 1, -1); // resize type = add
+  //glOrtho(-w/200, w/200, -h/200, h/200, 1, 10); // resize type = center
+  gluPerspective(fovy, (double)viewport.w / (double)viewport.h, 1.0f, 200.0f);
+  //------------------------------------------------------------
+}
+
+//Initializes 3D rendering
+void initRendering() {
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_COLOR_MATERIAL);
+  glEnable(GL_LIGHTING); //Enable lighting
+  glEnable(GL_LIGHT0); //Enable light #0
+  glEnable(GL_LIGHT1); //Enable light #1
+  glEnable(GL_NORMALIZE); //Automatically normalize normals
+}
+
+//****************************************************
+// sets the window up
+//****************************************************
+void initScene(){
+  glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // Clear to black, fully transparent
+
+  myReshape(viewport.w,viewport.h);
+}
+
+
+//***************************************************
+// function that does the actual drawing
+//***************************************************
+void myDisplay() {
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);// clear the color buffer (sets everything to black)
+  if (flat && !wireframe) {
+    glEnable(GL_FLAT);
+    glShadeModel(GL_FLAT);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  } else if (smooth && !wireframe) {
+    glEnable(GL_SMOOTH);
+    glShadeModel(GL_SMOOTH);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  } else if(wireframe) {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  } else if(hidden) {
+    
+  }
+  glMatrixMode(GL_MODELVIEW); // indicate we are specifying camera transformations
+  gluLookAt(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f);
+  glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambientColor);
+  glLightfv(GL_LIGHT0, GL_DIFFUSE, lightColor0);
+  glLightfv(GL_LIGHT0, GL_POSITION, lightPos0);
+  glLightfv(GL_LIGHT1, GL_DIFFUSE, lightColor1);
+  glLightfv(GL_LIGHT1, GL_POSITION, lightPos1);
+
+  renderer->draw(selected);
+
+  if (hidden && wireframe) {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(1.0, 1.0);
+    glColor3f(0.0f, 0.0f, 0.0f);
+    renderer->draw(-2);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+  }
+
+  glFlush();
+  glutSwapBuffers();                           // swap buffers (we earlier set double buffer)
+}
+
+//****************************************************
+// handle keyboard input
+//****************************************************
+void keyboard(unsigned char key, int x, int y) {
+ switch(key)
+   {
+   case 27:
+     exit(0);
+   case 's':
+     //smooth shade
+     smooth = !smooth;
+     flat = !flat;
+     break;
+   case 'w':
+     wireframe = !wireframe;
+     break;
+   case 'h':
+     hidden = !hidden;
+     break;
+   case 'x':
+     selected++;
+     if (selected >= renderer->renders.size()) {
+       selected = -1;
+     }
+     break;
+   case '=':
+     if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->tz += 0.25f;
+     break;
+   case '-':
+     if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->tz -= 0.25f;
+     break;
+   }
+}
+
+void handleSpecialKeypress(int key, int x, int y) {
+  int mod = glutGetModifiers();
+  switch (key) {
+  case GLUT_KEY_DOWN:
+    if (mod == GLUT_ACTIVE_SHIFT) {
+      if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->ty -= 0.25f;
+    } else {
+      if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->ax += 2.0f;
+    }
+    break;
+  case GLUT_KEY_UP:
+    if (mod == GLUT_ACTIVE_SHIFT) {
+      if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->ty += 0.25f;
+    } else {
+      if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->ax -= 2.0f;
+    }
+   break;
+  case GLUT_KEY_LEFT:
+    if (mod == GLUT_ACTIVE_SHIFT) {
+      if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->tx += 0.25f;
+    } else {
+      if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->ay += 2.0f;
+    }
+    break;
+  case GLUT_KEY_RIGHT:
+    if (mod == GLUT_ACTIVE_SHIFT) {
+      if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->tx -= 0.25f;
+    } else {
+      if (selected == -1) {
+       break;
+     }
+     renderer->renders[selected]->ay -= 2.0f;
+    }
+    break;
+  }
+}
+//****************************************************
+// called by glut when there are no messages to handle
+//****************************************************
+void myFrameMove() {
+  //nothing here for now
+#ifdef _WIN32
+  Sleep(10);                                   //give ~10ms back to OS (so as not to waste the CPU)
+#endif
+  glutPostRedisplay(); // forces glut to call the display function (myDisplay())
+}
+
+//****************************************************
+// the usual stuff, nothing exciting here
+//****************************************************
+int main(int argc, char *argv[]) {
+  int counter = 1;
+  renderer = new Renderer();
+  Tessellate *t;
+  bool set = false;
+  while (counter < argc) {
+    filename = argv[counter];
+    if (strcmp(filename.substr(filename.length()-4, 4).c_str(), ".bez") == 0) {
+      counter++;
+      if (counter == argc) {
+        cout << "Invalid Arguments: no subdivision parameter following .bez file (" << filename << ")" << endl;
+        exit(1);
+      }
+      if (counter + 1 < argc) {
+        if (strcmp(argv[counter+1], "-a") == 0) {
+          counter++;
+          t = new Adaptive();
+          set = true;
+        }
+      }
+      if (!set) {
+        t = new Uniform();
+        set = true;
+      }
+      t->f = atof(argv[2]);
+      t->loadBEZ(filename);
+    } else if(strcmp(filename.substr(filename.length()-4, 4).c_str(), ".obj") == 0) {
+      t = new Uniform();
+      t->loadOBJ(filename);
+    } else {
+      cout << "Invalid Arguments: input file (" << filename << ") unrecognized" << endl;
+      exit(1);
+    }
+    counter++;
+    renderer->renders.push_back(new Render(t));
+  }
+  
+  //This initializes glut
+  glutInit(&argc, argv);
+
+  //This tells glut to use a double-buffered window with red, green, and blue channels 
+  glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+
+  // Initalize theviewport size
+  viewport.w = 1000;
+  viewport.h = 600;
+
+  //The size and position of the window
+  glutInitWindowSize(viewport.w, viewport.h);
+  glutInitWindowPosition(0, 0);
+  glutCreateWindow("CS184 AS3");
+  initRendering();
+  initScene();                                 // quick function to set up scene
+
+  glutDisplayFunc(myDisplay);                  // function to run when its time to draw something
+  glutReshapeFunc(myReshape);                  // function to run when the window gets resized
+  glutIdleFunc(myFrameMove);                   // function to run when not handling any other task
+  glutKeyboardFunc(keyboard);
+  glutSpecialFunc(handleSpecialKeypress);
+  glutMainLoop();                              // infinite loop that will keep drawing and resizing and whatever else
+
+  return 0;
+}
+
+
+
+
+
+
+
+

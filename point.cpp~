@@ -1,0 +1,53 @@
+#include <iostream>
+#include <cmath>
+#include <math.h>
+#include "point.h"
+#include "vector.h"
+
+#define PI 3.14159265  // Should be used from mathlib
+inline float sqr(float x) { return x*x; }
+
+using namespace std;
+
+Point::Point() {
+  z = 0.0;
+  y = 0.0;
+  x = 0.0;
+  w = 1.0;
+}
+
+Point::Point(Vector v) {
+  x = v.x;
+  y = v.y;
+  z = v.z;
+  w = 1.0f;
+}
+
+Point::Point(float x_val, float y_val, float z_val) {
+  x = x_val;
+  y = y_val;
+  z = z_val;
+  w = 1.0;
+}
+
+float Point::operator*(Point p) {
+  return (x*p.x + y*p.y + z*p.z);
+}
+Point Point::operator*(float i) {
+  Point newPoint(i*x, i*y, i*z);
+  return newPoint;
+}
+Vector Point::operator-(Point p) {
+  Vector newVector(x - p.x, y - p.y, z - p.z);
+  return newVector;
+}
+Point Point::operator+(Vector v) {
+  Point newP(x + v.x, y + v.y, z + v.z);
+  return newP;
+}
+Point Point::operator+(Point p) {
+  Point newP(x + p.x, y + p.y, z + p.z);
+}
+void Point::show() {
+  cout << "Point: " << x << " " << y << " " << z << " " << w << endl;
+}

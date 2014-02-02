@@ -1,0 +1,43 @@
+Kevin Xie: cs184-bg
+Azim Momin: cs184-ae
+
+Platform: Linux hive7.CS.Berkeley.EDU 
+
+Location of sourcecode: ~/as3/ [In cs184-ae home directory]
+- The name of the main file is main.cpp 
+
+Azim Momin (cs184-ae) will submit on INSERT PLATFORM NAME HERE
+
+Compiling:
+	make clean; make; ./bezier testPath subdivision [-a]
+
+	- All items in [] are optional.
+	- testPath is the path to the test file. This can be a .obj file or a .bez file.
+	- subdivision is the subdivision constant mentioned in the specs. This is optional
+	  if you are loading in a .obj file.
+	- -a will make the tessellation adaptive.
+
+Required Features:
+	 - The UP/DOWN/LEFT/RIGHT keys rotate the object.
+	 - SHIFT + UP/DOWN/LEFT/RIGHT translates the object.
+	 - +/- zooms in and out.
+	 - Pressing s will toggle smooth/flat shading (default is flat shading)
+	 - Pressing w will toggle wireframe/filled mode (default is filled)
+	 - The object is auto-centered intially.
+
+Extras:
+
+OBJ Parser:
+    Our program takes .obj files and displays the image on the screen. No extra parameters are
+    needed. Just specify the .obj file instead of the .bez file
+    
+    Example: make clean; make; ./bezier tests/obj/airboat.obj
+
+Hidden Line Removal:
+    Upon pressing 'h' our program will remove lines that are "hidden" and not visible to the
+    viewer. Note that you must be in wireframe mode to see this.
+
+    Example: make clean; make; ./bezier tests/bez/teapot.obj .1
+
+    	     press "w"
+	     press "h"

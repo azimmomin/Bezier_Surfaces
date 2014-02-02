@@ -1,0 +1,42 @@
+Kevin Xie: cs184-bg
+Azim Momin: cs184-ae
+
+Platform: Linux s275-22.CS.Berkeley.EDU
+
+Location of sourcecode: ~/as1/ [In cs184-ae home directory]
+- The name of the file is still example_01.cpp
+
+Azim Momin (cs184-ae) will submit on Linux s273-23.CS.Berkeley.EDU.
+
+Extras:
+Our implementation actually has no limit on the number of lights...so go crazy.
+
+The following commands are optional (i.e. extra credit).
+
+Write the image to a file in .pbm format:
+
+      Filename should end with .pbm (ex. image.pbm)
+      ImageWidth is actually the same as the width of the viewport
+      ImageHeight is the same as the height of the viewport.
+      -wf [Filename] [ImageWidth] [ImageHeight]
+
+      Examples:
+
+      "Pokeball"
+      make clean; make; ./as1 -ka .03 .02 .02 -kd 1.0 1.0 1.0 -ks .65 .65 .65 -pl 0.5 -6.0 0.5 .7 .7 .7 -pl -0.5 6.0 -0.5 .7 0.0 0.0 -pl 0.0 0.0 1.04 .5 .5 .5 -sp 20.0 -wf pokeball.pbm 400 400
+
+      "Rainbow"
+      make clean; make;./as1 -kd 0.7 0.7 0.7 -ks 0.7 0.2 0.2 -pl 4.0 0.0 2.0 0.7 0.1 0.1 -pl 0.0 4.0 2.0 0.4 0.5 0.9 -pl -4.0 -4.0 1.0 0.4 0.8 0.5 -pl 0.0 0.0 1.0 0.4 0.5 0.9 -sp 20.0 -wf rainbow.pbm 400 400
+
+A simple toon shading effect:
+
+      The higher the Tolerance, the greater the toon effect but if the Tolerance is too high, the image will beoome "flat". Therefore, keep Tolerance between 0.05 and 0.3 for optimal toon effect.
+      -ts [Tolerance]
+
+      Examples:
+
+      "Toon DragonBall"
+      make clean; make; ./as1 -ka .85 .8 .4 -kd .4 .5 .1 -ks .8 .8 .2 -sp 100 -pl 2 1 2 .3 .2 .1 -pl -2 1 2 .3 .2 .1 -dl 1 1 1 .2 .2 .2 -pl 0 -2 2 .3 .2 .1 -ts 0.2
+
+      "Toon Pokeball"
+      make clean; make; ./as1 -ka .03 .02 .02 -kd 1.0 1.0 1.0 -ks .65 .65 .65 -pl 0.5 -6.0 0.5 .7 .7 .7 -pl -0.5 6.0 -0.5 .7 0.0 0.0 -pl 0.0 0.0 1.04 .5 .5 .5 -sp 20.0 -ts 0.1

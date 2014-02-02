@@ -1,0 +1,533 @@
+#include "patch.h"
+#include "point.h"
+#include "vector.h"
+#include "normal.h"
+#include "tessellate.h"
+#include <GL/glut.h>
+#include <GL/glu.h>
+#include <vector>
+#include <cmath>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <cfloat>
+
+Render::Render() {
+  tx = 0.0f;
+  ty = 0.0f;
+  tz = 0.0f;
+  ax = 0.0f;
+  ay = 0.0f;
+  tessellate = new Uniform();
+}
+
+Render::Render(Tessellate *t) {
+  tessellate = t;
+  tx = (t->maxX + t->minX) * 0.5f;
+  ty = (t->maxY + t->minY) * 0.5f;
+  tz = -t->maxZ - ((t->maxX - t->minX) + (t->maxY - t->minY)) * 0.5f;;
+  ax = 0.0f;
+  ay = 0.0f;
+}
+
+void Render::draw() {
+  glLoadIdentity();                            // make sure transformation is "zero'd
+  glTranslatef(tx, ty, tz);
+  glRotatef(ay, 0.0f, 1.0f, 0.0f);
+  glRotatef(ax, 1.0f, 0.0f, 0.0f);
+  tessellate->draw();
+}
+
+Renderer::Renderer() {
+}
+
+Renderer::Renderer(vector<Render*>& rs) {
+  renders.insert(renders.begin(), rs.begin(), rs.end());
+}
+
+void Renderer::draw(int selected) {
+  for (int i = 0; i < renders.size(); i++) {
+    if (selected == -2) {
+      glColor3f(0.0f, 0.0f, 0.0f);
+    } else if (i == selected) {
+      glColor3f(1.0f, 1.0f, 0.0f);
+    } else {
+      glColor3f(1.0f, 0.0f, 1.0f);
+    }
+    renders[i]->draw();
+  }
+}
+
+Tessellate::Tessellate() {
+}
+
+Tessellate::Tessellate(vector<Patch*>& patches) {
+  load(patches);
+}
+
+int Tessellate::getLength(std::string substring) {
+  int i = 0;
+  for (; i < substring.length(); i++) {
+    if (substring[i] == '/') {
+      break;
+    }
+  }
+  return i;
+}
+
+void Tessellate::loadOBJ(std::string filename) {
+  maxX = FLT_MIN;
+  maxY = FLT_MIN;
+  minX = FLT_MAX;
+  minY = FLT_MAX;
+  maxZ = FLT_MIN;
+  minZ = FLT_MAX;
+  vector<Point*> vertices;
+  ifstream inpfile(filename.c_str());
+  if(!inpfile.is_open()) {
+    cout << "Unable to open file" << endl;
+  } else {
+    string line;
+    while (inpfile.good()) {
+      vector<string> splitline;
+      string buf;
+      getline(inpfile, line);
+      stringstream ss(line);
+      while (ss >> buf) {
+	splitline.push_back(buf);
+      }
+      if (splitline.size() == 0) {
+	continue;
+      }
+      if (splitline[0][0] == '#') {
+	continue;
+      } 
+      if (splitline[0][0] == 'v') {
+	float x = atof(splitline[1].c_str());
+	float y = atof(splitline[2].c_str());
+	float z = atof(splitline[3].c_str());
+	maxX = (x > maxX) ? x : maxX;
+	maxY = (y > maxY) ? y : maxY;
+	minX = (x < minX) ? x : minX;
+	minY = (y < minY) ? y : minY;
+	maxZ = (z > maxZ) ? z : maxZ;
+	minZ = (z < minZ) ? z : minZ;
+	vertices.push_back(new Point(x, y, z));
+      }
+      Point *p0, *p1, *p2, *p3;
+      Normal *n;
+      if (splitline[0][0] == 'f') {
+	if (splitline.size() == 4) {
+	  p0 = vertices[atof(splitline[1].substr(0, getLength(splitline[1].c_str())).c_str()) - 1];
+	  p1 = vertices[atof(splitline[2].substr(0, getLength(splitline[2].c_str())).c_str()) - 1];
+	  p2 = vertices[atof(splitline[3].substr(0, getLength(splitline[3].c_str())).c_str()) - 1];
+	  n = new Normal((*p0-*p1).cross(*p2-*p1));
+	  shapes.push_back(new Tri(p0, n, p1, n, p2, n));
+	} else if (splitline.size() == 5) {
+	  p0 = vertices[atof(splitline[1].substr(0, getLength(splitline[1].c_str())).c_str()) - 1];
+	  p1 = vertices[atof(splitline[2].substr(0, getLength(splitline[2].c_str())).c_str()) - 1];
+	  p2 = vertices[atof(splitline[3].substr(0, getLength(splitline[3].c_str())).c_str()) - 1];
+	  p3 = vertices[atof(splitline[4].substr(0, getLength(splitline[4].c_str())).c_str()) - 1];
+	  n = new Normal((*p0-*p1).cross(*p2-*p1));
+	  shapes.push_back(new Quad(p0, n, p1, n, p2, n, p3, n));
+	} else if (splitline.size() > 5) {
+	  Polygon *poly = new Polygon();
+	  for (int index = 1; index < splitline.size(); index++) {
+	    poly->points.push_back(vertices[atof(splitline[index].substr(0, getLength(splitline[index].c_str())).c_str()) - 1]);
+	  }
+	  poly->n = new Normal((*(poly->points[0]) - *(poly->points[1])).cross(*(poly->points[2]) - *(poly->points[1])));
+	  shapes.push_back(poly);
+	}
+      }
+    }
+  }
+}
+
+void Tessellate::loadBEZ(std::string filename) {
+  maxX = FLT_MIN;
+  maxY = FLT_MIN;
+  minX = FLT_MAX;
+  minY = FLT_MAX;
+  maxZ = FLT_MIN;
+  minZ = FLT_MAX;
+  vector<Patch*> patches;
+  Patch *patch = new Patch();
+  ifstream inpfile(filename.c_str());
+  if (!inpfile.is_open()) {
+    cout << "Unable to open file" << endl;
+  } else {
+    string line;
+    while(inpfile.good()) {
+      vector<string> splitline;
+      string buf;
+      getline(inpfile, line);
+      stringstream ss(line);
+      while (ss >> buf) {
+	splitline.push_back(buf);
+      }
+      if(splitline.size() == 0) {
+	continue;
+      }
+      if (splitline[0][0] == '#') {
+	continue;
+      }
+      else if (splitline.size() == 1) {
+	continue;
+      }
+      else {
+	float x, y, z;
+	if (splitline.size() == 12) {
+	  Point p0, p1, p2, p3;
+          Point ps[4] = {p0, p1, p2, p3};
+	  for (int i = 0; i < 12; i += 3) {
+	    x = atof(splitline[i].c_str());
+	    y = atof(splitline[i+1].c_str());
+	    z = atof(splitline[i+2].c_str());
+	    maxX = (x > maxX) ? x : maxX;
+	    maxY = (y > maxY) ? y : maxY;
+	    minX = (x < minX) ? x : minX;
+	    minY = (y < minY) ? y : minY;
+	    maxZ = (z > maxZ) ? z : maxZ;
+	    minZ = (z < minZ) ? z : minZ;
+            Point p(x, y, z);
+            ps[i/3] = p;
+	  }
+	  patch->addPoints(ps[0], ps[1], ps[2], ps[3]);
+	} else if (splitline.size() == 3) {
+	  x = atof(splitline[0].c_str());
+	  y = atof(splitline[1].c_str());
+	  z = atof(splitline[2].c_str());
+	  maxX = (x > maxX) ? x : maxX;
+	  maxY = (y > maxY) ? y : maxY;
+	  minX = (x < minX) ? x : minX;
+	  minY = (y < minY) ? y : minY;
+	  maxZ = (z > maxZ) ? z : maxZ;
+	  minZ = (z < minZ) ? z : minZ;
+	  Point p(x, y, z);
+	  patch->addPoint(p);
+	}
+      }
+      if (patch->getCounter() == 16) {
+	patches.push_back(patch);
+	patch = new Patch();
+      }
+    }
+    load(patches);
+  }
+}
+
+void Tessellate::load(vector<Patch*>& patches) {
+  for (int i = 0; i < patches.size(); i++) {
+    subdividePatch(patches[i]);
+  }
+}
+
+void Tessellate::draw() {
+  for (int i = 0; i < shapes.size(); i++) {
+    shapes[i]->draw();
+  }
+}
+
+void Tessellate::bezCurveInterp(Point curve[], float t, Point *p, Vector *dp) {
+  Point a = curve[0] * (1.0f - t) + curve[1] * t;
+  Point b = curve[1] * (1.0f - t) + curve[2] * t;
+  Point c = curve[2] * (1.0f - t) + curve[3] * t;
+  Point d = a * (1.0f - t) + b * t;
+  Point e = b * (1.0f - t) + c * t;
+  *p = d * (1.0f - t) + e * t;
+  *dp = (e - d) * 3.0f;	
+}
+
+void Uniform::subdividePatch(Patch *patch) {
+  vector<Point*> points;
+  vector<Normal*> normals;
+  bool uDone = false, vDone = false;
+  float u = 0.0f, v = 0.0f;
+  int uCount = 0, vCount = 0;
+  while (!uDone) {
+    if (u > 1.0f) {
+      u = 1.0f;
+      uDone = true;
+    }
+    vCount = 0;
+    while (!vDone) {
+      if (v > 1.0f) {
+        v = 1.0f;
+        vDone = true;
+      }
+      Point *point = new Point();
+      Normal *normal = new Normal();
+      findPoint(patch, u, v, point, normal);
+      points.push_back(point);
+      normals.push_back(normal);
+      v += f;
+      vCount++;
+    }
+    v = 0.0f;
+    vDone = false;
+    u += f;
+    uCount++;
+  }
+  for (int i = 0; i < uCount-1; i++) {
+    for (int j = 0; j < vCount-1; j++) {
+      int k = i + j * uCount;
+      shapes.push_back(new Quad(points[k], normals[k], points[k+1], normals[k+1], points[k+uCount+1], normals[k+uCount+1], points[k+uCount], normals[k+uCount]));
+    }
+  }
+}
+
+void Tessellate::findPoint(Patch *patch, float u, float v, Point *point, Normal *normal) {
+  Point vc[4];
+  Vector vTemp1;
+  Vector vTemp2;
+  for (int i = 0; i < 16; i+=4) {
+    Point c[4] = {patch->points[i], patch->points[i+1], patch->points[i+2], patch->points[i+3]};
+    bezCurveInterp(c, u, point, &vTemp1);
+    vc[i/4] = *point;
+  }
+  Point uc[4];
+  for (int i = 0; i < 4; i++) {
+    Point c[4] = {patch->points[i], patch->points[i+4], patch->points[i+8], patch->points[i+12]};
+    bezCurveInterp(c, v, point, &vTemp2);
+    uc[i] = *point;
+  }
+  bezCurveInterp(uc, u, point, &vTemp1);
+  bezCurveInterp(vc, v, point, &vTemp2);
+  *normal = vTemp1.cross(vTemp2);
+}
+
+Uniform::Uniform() {
+}
+
+Adaptive::Adaptive() {
+}
+
+void Adaptive::subdividePatch(Patch *patch) {
+  vector<UVTri*> toProcess;
+  UVGroup ll(new Point(), new Normal(), 1.0f, 0.0f);
+  UVGroup ur(new Point(), new Normal(), 0.0f, 1.0f);
+  UVGroup ul(new Point(), new Normal(), 0.0f, 0.0f);
+  UVGroup lr(new Point(), new Normal(), 1.0f, 1.0f);
+  UVGroup corners[4] = {ul, ur, lr, ll};
+  for (int i = 0; i < 4; i++) {
+    UVGroup uv = corners[i];
+    findPoint(patch, uv.u, uv.v, uv.p, uv.n);
+  }
+  toProcess.push_back(new UVTri(corners[3], corners[1], corners[0]));
+  toProcess.push_back(new UVTri(corners[3], corners[2], corners[1]));
+  while (!toProcess.empty()) {
+    UVTri uvTri = *(toProcess.back());
+    toProcess.pop_back();
+    UVGroup uv0(new Point(), new Normal(), (uvTri.u0 + uvTri.u1) * 0.5f, (uvTri.v0 + uvTri.v1) * 0.5f);
+    UVGroup uv1(new Point(), new Normal(), (uvTri.u1 + uvTri.u2) * 0.5f, (uvTri.v1 + uvTri.v2) * 0.5f);
+    UVGroup uv2(new Point(), new Normal(), (uvTri.u2 + uvTri.u0) * 0.5f, (uvTri.v2 + uvTri.v0) * 0.5f);
+    Point ep0 = (*(uvTri.p0) + *(uvTri.p1)) * 0.5f;
+    Point ep1 = (*(uvTri.p1) + *(uvTri.p2)) * 0.5f;
+    Point ep2 = (*(uvTri.p2) + *(uvTri.p0)) * 0.5f;
+    findPoint(patch, uv0.u, uv0.v, uv0.p, uv0.n);
+    findPoint(patch, uv1.u, uv1.v, uv1.p, uv1.n);
+    findPoint(patch, uv2.u, uv2.v, uv2.p, uv2.n);
+    bool s0 = (*(uv0.p) - ep0).magnitude() < f;
+    bool s1 = (*(uv1.p) - ep1).magnitude() < f;
+    bool s2 = (*(uv2.p) - ep2).magnitude() < f;
+    if (s0 && s1 && s2) {
+      shapes.push_back(new Tri(uvTri));
+    } else if (!s0 && s1 && s2) {
+      toProcess.push_back(new UVTri(uvTri.get(0), uvTri.get(2), uv0));
+      toProcess.push_back(new UVTri(uvTri.get(1), uvTri.get(2), uv0));
+    } else if (s0 && !s1 && s2) {
+      toProcess.push_back(new UVTri(uvTri.get(0), uvTri.get(2), uv1));
+      toProcess.push_back(new UVTri(uvTri.get(0), uvTri.get(1), uv1));
+    } else if (s0 && s1 && !s2) {
+      toProcess.push_back(new UVTri(uvTri.get(1), uvTri.get(0), uv2));
+      toProcess.push_back(new UVTri(uvTri.get(1), uvTri.get(2), uv2));
+    } else if (!s0 && !s1 && s2) {
+      toProcess.push_back(new UVTri(uvTri.get(0), uv1, uv0));
+      toProcess.push_back(new UVTri(uvTri.get(1), uv1, uv0));
+      toProcess.push_back(new UVTri(uvTri.get(2), uvTri.get(0), uv1));
+    } else if (s0 && !s1 && !s2) {
+      toProcess.push_back(new UVTri(uvTri.get(2), uv2, uv1));
+      toProcess.push_back(new UVTri(uvTri.get(1), uv1, uv2));
+      toProcess.push_back(new UVTri(uvTri.get(0), uvTri.get(1), uv2));
+    } else if (!s0 && s1 && !s2) {
+      toProcess.push_back(new UVTri(uvTri.get(0), uv2, uv0));
+      toProcess.push_back(new UVTri(uvTri.get(2), uv2, uv0));
+      toProcess.push_back(new UVTri(uvTri.get(2), uvTri.get(1), uv0));
+    } else {
+      toProcess.push_back(new UVTri(uvTri.get(0), uv2, uv0));
+      toProcess.push_back(new UVTri(uvTri.get(1), uv1, uv0));
+      toProcess.push_back(new UVTri(uvTri.get(2), uv1, uv2));
+      toProcess.push_back(new UVTri(uv0, uv1, uv2));
+    }
+  }
+}
+
+UVGroup::UVGroup() {
+  u = 0.0f;
+  v = 0.0f;
+}
+
+UVGroup::UVGroup(Point *p_0, Normal *n_0, float u_0, float v_0) {
+  p = p_0;
+  n = n_0;
+  u = u_0;
+  v = v_0;
+}
+
+void Quad::draw() {
+  glBegin(GL_QUADS);
+  for(int i = 0; i < 4; i++) {
+    Point p = *points[i];
+    Normal n = *normals[i];
+    glNormal3f(n.x, n.y, n.z);
+    glVertex3f(p.x, p.y, p.z);
+  }
+  glEnd();
+}
+
+Quad::Quad() {
+  Point *p = new Point();
+  Normal *n = new Normal();
+  for (int i = 0; i < 4; i++) {
+    points[i] = p;
+    normals[i] = n;
+  }
+}
+
+Quad::Quad(Point *p0, Normal *n0, Point *p1, Normal *n1, Point *p2, Normal *n2, Point *p3, Normal *n3) {
+  points[0] = p0;
+  points[1] = p1;
+  points[2] = p2;
+  points[3] = p3;
+  normals[0] = n0;
+  normals[1] = n1;
+  normals[2] = n2;
+  normals[3] = n3;
+}
+
+void Quad::show() {
+  cout << "Quad:" << endl;
+  for (int i = 0; i < 4; i++ ) {
+    points[i]->show();
+    normals[i]->show();
+  }
+}
+
+void Tri::show() {
+  cout << "Tri:" << endl;
+  for (int i = 0; i < 3; i++ ) {
+    points[i]->show();
+    normals[i]->show();
+  }
+}
+
+void Tri::draw() {
+  glBegin(GL_TRIANGLES);
+  for(int i = 0; i < 3; i++) {
+    Point p = *points[i];
+    Normal n = *normals[i];
+    glNormal3f(n.x, n.y, n.z);
+    glVertex3f(p.x, p.y, p.z);
+  }
+  glEnd();
+}
+
+Tri::Tri() {
+  Point *p = new Point();
+  Normal *n = new Normal();
+  for (int i = 0; i < 3; i++) {
+    points[i] = p;
+    normals[i] = n;
+  }
+}
+
+Tri::Tri(UVTri uvTri) {
+  points[0] = uvTri.p0;
+  points[1] = uvTri.p1;
+  points[2] = uvTri.p2;
+  normals[0] = uvTri.n0;
+  normals[1] = uvTri.n1;
+  normals[2] = uvTri.n2;
+}
+
+Tri::Tri(Point *p0, Normal *n0, Point *p1, Normal *n1, Point *p2, Normal *n2) {
+  points[0] = p0;
+  points[1] = p1;
+  points[2] = p2;
+  normals[0] = n0;
+  normals[1] = n1;
+  normals[2] = n2;
+}
+
+Polygon::Polygon() {
+}
+
+void Polygon::draw() {
+  glBegin(GL_POLYGON);
+  for(int i = 0; i < points.size(); i++) {
+    Point p = *points[i];
+    glNormal3f(n->x, n->y, n->z);
+    glVertex3f(p.x, p.y, p.z);
+  }
+  glEnd();
+}
+
+void Polygon::show() {
+  cout << "Polygon:" << endl;
+  for (int i = 0; i < points.size(); i++ ) {
+    points[i]->show();
+  }
+  n->show();
+}
+
+UVTri::UVTri() {
+  u0 = 0.0f;
+  u1 = 0.0f;
+  u2 = 0.0f;
+  v0 = 0.0f;
+  v1 = 0.0f;
+  v2 = 0.0f;
+}
+
+UVTri::UVTri(UVGroup uv0, UVGroup uv1, UVGroup uv2) {
+  p0 = uv0.p;
+  p1 = uv1.p;
+  p2 = uv2.p;
+  n0 = uv0.n;
+  n1 = uv1.n;
+  n2 = uv2.n;
+  u0 = uv0.u;
+  u1 = uv1.u;
+  u2 = uv2.u;
+  v0 = uv0.v;
+  v1 = uv1.v;
+  v2 = uv2.v;
+}
+
+UVTri::UVTri(Point *p_0, Normal *n_0, float u_0, float v_0, Point *p_1, Normal *n_1, float u_1, float v_1, Point *p_2, Normal *n_2, float u_2, float v_2) {
+  p0 = p_0;
+  p1 = p_1;
+  p2 = p_2;
+  n0 = n_0;
+  n1 = n_1;
+  n2 = n_2;
+  u0 = u_0;
+  u1 = u_1;
+  u2 = u_2;
+  v0 = v_0;
+  v1 = v_1;
+  v2 = v_2;
+}
+
+UVGroup UVTri::get(int index) {
+  if (index == 2) {
+    UVGroup uv(p2, n2, u2, v2);
+    return uv;
+  }
+  if (index == 1) {
+    UVGroup uv(p1, n1, u1, v1);
+    return uv;
+  }
+  UVGroup uv(p0, n0, u0, v0);
+  return uv;
+}
